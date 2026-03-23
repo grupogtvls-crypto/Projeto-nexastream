@@ -1,0 +1,3 @@
+import { SiteFooter } from '../../components/site-footer';
+import { SiteHeader } from '../../components/site-header';
+export default function SupportPage() { return <main className="page-bg"><SiteHeader /><section className="container" style={{ paddingTop: 60, paddingBottom: 40 }}><div className="grid-2"><div className="card" style={{ padding: 28 }}><h1>Suporte NexaStream</h1><p style={{ color: '#94a3b8' }}>Canal de suporte para dúvidas sobre acesso, ativação, downloads e licenças.</p></div><div className="card" style={{ padding: 28 }}><h2>Atendimento</h2><p style={{ color: '#94a3b8' }}>E-mail: suporte@nexastream.fun</p><p style={{ color: '#94a3b8' }}>WhatsApp: (00) 00000-0000</p></div></div></section><SiteFooter /></main>; }

@@ -1,0 +1,6 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { CustomerProtected } from '../../../components/customer-protected';
+import { SiteHeader } from '../../../components/site-header';
+type Device = { id: string; deviceCode: string; platform: string; blocked: boolean; macActivated: boolean };
+export default function CustomerDevicesPage() { const [devices, setDevices] = useState<Device[]>([]); useEffect(() => { const token = localStorage.getItem('nexastream_token'); fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/devices/me`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'include' }).then((res) => res.json()).then(setDevices).catch(() => undefined); }, []); return <CustomerProtected><main className="page-bg"><SiteHeader /><section className="container" style={{ paddingTop: 50, paddingBottom: 50 }}><h1>Meus dispositivos</h1><div style={{ display: 'grid', gap: 16, marginTop: 24 }}>{devices.map((device) => <div key={device.id} className="card" style={{ padding: 24 }}><p><strong>Código:</strong> {device.deviceCode}</p><p><strong>Plataforma:</strong> {device.platform}</p><p><strong>Status:</strong> {device.blocked ? 'Bloqueado' : 'Ativo'}</p><p><strong>MAC:</strong> {device.macActivated ? 'Ativado' : 'Inativo'}</p></div>)}</div></section></main></CustomerProtected>; }

@@ -1,0 +1,4 @@
+import Link from 'next/link';
+import { SiteFooter } from '../../components/site-footer';
+import { SiteHeader } from '../../components/site-header';
+export default function PlansPage() { return <main className="page-bg"><SiteHeader /><section className="container" style={{ paddingTop: 60, paddingBottom: 40 }}><h1>Planos NexaStream</h1><div className="grid-3" style={{ marginTop: 24 }}>{[['Mensal', 'R$ 24,90', 'Ideal para quem está começando.'], ['Premium Anual', 'R$ 199,90', 'Maior economia e fidelização.'], ['Família', 'R$ 69,90', 'Perfeito para múltiplos acessos.']].map(([title, price, desc]) => <div key={title} className="card" style={{ padding: 24 }}><h3>{title}</h3><div style={{ fontSize: 28, fontWeight: 800, margin: '10px 0' }}>{price}</div><p style={{ color: '#94a3b8', lineHeight: 1.7 }}>{desc}</p><Link href="/cadastro" className="btn-primary" style={{ display: 'inline-block', marginTop: 14 }}>Assinar</Link></div>)}</div></section><SiteFooter /></main>; }

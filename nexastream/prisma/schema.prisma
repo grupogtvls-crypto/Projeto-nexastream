@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+  RESELLER
+}
+
+enum DeviceStatus {
+  ACTIVE
+  BLOCKED
+  PENDING
+  EXPIRED
+}
+
+enum LicenseStatus {
+  ACTIVE
+  INACTIVE
+  EXPIRED
+  REPLACED
+}
+
+model User {
+  id               String    @id @default(cuid())
+  name             String
+  email            String    @unique
+  passwordHash     String?
+  provider         String?
+  providerId       String?
+  role             UserRole  @default(CUSTOMER)
+  phone            String?
+  avatarUrl        String?
+  refreshTokenHash String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  devices          Device[]
+  licenses         License[]
+}
+
+model Playlist {
+  id         String    @id @default(cuid())
+  name       String
+  sourceType String
+  sourceUrl  String?
+  username   String?
+  password   String?
+  host       String?
+  active     Boolean   @default(true)
+  devices    Device[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model License {
+  id           String         @id @default(cuid())
+  key          String         @unique
+  status       LicenseStatus  @default(ACTIVE)
+  durationDays Int
+  startsAt     DateTime?
+  expiresAt    DateTime?
+  notes        String?
+  userId       String?
+  user         User?          @relation(fields: [userId], references: [id])
+  devices      Device[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model Device {
+  id           String        @id @default(cuid())
+  deviceCode   String        @unique
+  name         String?
+  platform     String
+  macAddress   String?
+  macActivated Boolean       @default(false)
+  status       DeviceStatus  @default(PENDING)
+  blocked      Boolean       @default(false)
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  playlistId   String?
+  playlist     Playlist?     @relation(fields: [playlistId], references: [id])
+  licenseId    String?
+  license      License?      @relation(fields: [licenseId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model PanelSetting {
+  id           String   @id @default(cuid())
+  panelName    String   @default("NexaStream Control Center")
+  logoUrl      String?
+  primaryColor String?  @default("#06b6d4")
+  maintenance  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+}

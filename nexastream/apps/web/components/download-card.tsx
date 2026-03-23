@@ -1,0 +1,2 @@
+type DownloadCardProps = { title: string; description: string; href: string };
+export function DownloadCard({ title, description, href }: DownloadCardProps) { return <a href={href} className="card" style={{ padding: 20, display: 'block' }}><div style={{ fontSize: 18, fontWeight: 700 }}>{title}</div><p style={{ color: '#94a3b8', marginTop: 8 }}>{description}</p><div style={{ marginTop: 14, color: '#67e8f9', fontWeight: 700 }}>Baixar agora</div></a>; }

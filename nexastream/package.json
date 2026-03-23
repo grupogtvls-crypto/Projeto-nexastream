@@ -1,0 +1,16 @@
+{
+  "name": "nexastream",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "dev:admin": "npm --workspace apps/admin run dev",
+    "dev:web": "npm --workspace apps/web run dev"
+  },
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

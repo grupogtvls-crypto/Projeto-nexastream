@@ -1,0 +1,13 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background: #020617; color: #fff; }
+a { color: inherit; text-decoration: none; }
+button, input { font: inherit; }
+.container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+.page-bg { min-height: 100vh; background: radial-gradient(circle at top right, rgba(8,145,178,0.18), transparent 25%), radial-gradient(circle at top left, rgba(37,99,235,0.15), transparent 20%), #020617; }
+.card { background: rgba(15,23,42,.92); border: 1px solid #1e293b; border-radius: 24px; }
+.btn-primary { background: #06b6d4; color: #082f49; border: none; border-radius: 14px; padding: 12px 18px; font-weight: 700; cursor: pointer; }
+.btn-secondary { background: transparent; color: white; border: 1px solid #334155; border-radius: 14px; padding: 12px 18px; font-weight: 600; cursor: pointer; }
+.input { width: 100%; padding: 12px 14px; border-radius: 14px; border: 1px solid #334155; background: #020617; color: #fff; }
+.grid-2 { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; }
+@media (max-width: 900px) { .grid-2,.grid-3 { grid-template-columns: 1fr; } }
