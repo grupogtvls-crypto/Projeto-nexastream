@@ -7,9 +7,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: [process.env.FRONTEND_WEB_URL || 'http://localhost:3000', process.env.FRONTEND_ADMIN_URL || 'http://localhost:3001'],
-    credentials: true,
-  });
+  origin: [
+    'https://nexastream.fun',
+    'https://www.nexastream.fun',
+    'https://admin.nexastream.fun',
+  ],
+  credentials: true,
+});
 
   app.use(cookieParser());
   app.setGlobalPrefix('api');
