@@ -8,11 +8,13 @@ import { PlaylistsModule } from './playlists/playlists.module';
 import { LicensesModule } from './licenses/licenses.module';
 import { SettingsModule } from './settings/settings.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { NexaAppCompatModule } from './compat/nexa-app-compat.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    NexaAppCompatModule,
     AuthModule,
     DevicesModule,
     UsersModule,
