@@ -13,7 +13,7 @@ export class UploadsController {
   @Roles('ADMIN')
   @Post('panel-logo')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadPanelLogo(@UploadedFile() file: Express.Multer.File) {
+  async uploadPanelLogo(@UploadedFile() file: any) {
     const uploaded: any = await this.cloudinaryService.uploadBuffer(file.buffer, 'nexastream/panel');
     return { url: uploaded.secure_url, publicId: uploaded.public_id };
   }
