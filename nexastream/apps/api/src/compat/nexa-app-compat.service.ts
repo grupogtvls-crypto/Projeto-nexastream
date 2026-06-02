@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthCodecService } from './auth-codec.service';
@@ -7,8 +7,10 @@ type DeviceWithRelations = Awaited<ReturnType<PrismaService['device']['findFirst
 
 @Injectable()
 export class NexaAppCompatService {
+  private readonly legacyOnly = process.env.NEXA_LEGACY_ONLY === 'true';
+
   constructor(
-    private readonly prisma: PrismaService,
+    @Optional() private readonly prisma: PrismaService,
     private readonly codec: AuthCodecService,
   ) {}
 
@@ -120,6 +122,22 @@ export class NexaAppCompatService {
   }
 
   private async ensureDevice(macAddress: string, platform: string) {
+    if (this.legacyOnly || !this.prisma) {
+      const createdAt = new Date();
+      return {
+        id: macAddress,
+        deviceCode: this.stableDeviceCode(macAddress),
+        name: `NexaStream ${macAddress}`,
+        platform,
+        macAddress,
+        macActivated: true,
+        status: 'ACTIVE',
+        blocked: false,
+        createdAt,
+        updatedAt: createdAt,
+      };
+    }
+
     const customer = await this.prisma.user.upsert({
       where: { email: process.env.NEXA_DEVICE_USER_EMAIL || 'devices@nexastream.local' },
       update: {},
@@ -154,6 +172,8 @@ export class NexaAppCompatService {
   }
 
   private async generateDeviceCode() {
+    if (this.legacyOnly || !this.prisma) return String(Date.now()).slice(-6);
+
     for (let i = 0; i < 20; i++) {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const found = await this.prisma.device.findUnique({ where: { deviceCode: code } });
@@ -164,12 +184,17 @@ export class NexaAppCompatService {
 
   private async resolvePlaylist(device?: NonNullable<DeviceWithRelations>) {
     if ((device as any)?.playlist) return (device as any).playlist;
+    if (this.legacyOnly || !this.prisma) return this.envPlaylist();
     return this.prisma.playlist.findFirst({ where: { active: true }, orderBy: { createdAt: 'desc' } });
   }
 
   private async resolvePlaylistByCredentials(query: Record<string, any>) {
     const username = query?.username ? String(query.username) : undefined;
     const password = query?.password ? String(query.password) : undefined;
+
+    if (this.legacyOnly || !this.prisma) {
+      return this.envPlaylist(username, password);
+    }
 
     if (username && password) {
       const byCredentials = await this.prisma.playlist.findFirst({
@@ -343,6 +368,24 @@ export class NexaAppCompatService {
 
   private demoStream(serverInfo: any) {
     return process.env.NEXA_DEMO_STREAM || `${serverInfo.server_protocol}://${serverInfo.url}:${serverInfo.port}/live/demo/demo/1.m3u8`;
+  }
+
+  private envPlaylist(username?: string, password?: string) {
+    return {
+      name: process.env.NEXA_DEMO_PLAYLIST_NAME || 'NexaStream Demo',
+      host: process.env.NEXA_DEMO_HOST || '',
+      sourceUrl: process.env.NEXA_DEMO_M3U || '',
+      sourceType: process.env.NEXA_DEMO_SOURCE_TYPE || 'xtream',
+      username: username || process.env.NEXA_DEMO_USERNAME || 'demo',
+      password: password || process.env.NEXA_DEMO_PASSWORD || 'demo',
+      active: true,
+    };
+  }
+
+  private stableDeviceCode(value: string) {
+    let hash = 0;
+    for (const char of value) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    return String(100000 + (hash % 900000));
   }
 
   private homeBlock() {
