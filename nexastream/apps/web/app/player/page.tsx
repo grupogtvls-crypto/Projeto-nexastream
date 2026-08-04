@@ -25,6 +25,48 @@ function readJson<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || '') as T; } catch { return fallback; }
 }
 
+function normalizeCredentials(input: Credentials): Credentials {
+  let rawServer = input.server.trim();
+  if (!rawServer) throw new Error('Informe o endereço do servidor');
+  if (!/^https?:\/\//i.test(rawServer)) rawServer = `https://${rawServer}`;
+
+  let url: URL;
+  try { url = new URL(rawServer); } catch { throw new Error('Endereço do servidor inválido'); }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Use um endereço HTTP ou HTTPS');
+
+  let username = input.username.trim() || url.searchParams.get('username')?.trim() || '';
+  let password = input.password || url.searchParams.get('password') || '';
+  const streamMatch = url.pathname.match(/\/(?:live|movie|series)\/([^/]+)\/([^/]+)(?:\/|$)/i);
+  if (streamMatch) {
+    username ||= decodeURIComponent(streamMatch[1]);
+    password ||= decodeURIComponent(streamMatch[2]);
+    url.pathname = url.pathname.slice(0, streamMatch.index || 0);
+  }
+  if (!username || !password) throw new Error('Informe o usuário e a senha da lista');
+
+  url.pathname = url.pathname
+    .replace(/\/(?:player_api|panel_api|get|xmltv)\.php\/?$/i, '')
+    .replace(/\/+$/, '');
+  url.search = '';
+  url.hash = '';
+
+  return {
+    server: `${url.origin}${url.pathname === '/' ? '' : url.pathname}`,
+    username,
+    password,
+  };
+}
+
+function directConnectionError(error: unknown, server: string) {
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && server.startsWith('http:')) {
+    return 'Esta lista usa HTTP e o navegador bloqueou a conexão direta dentro de uma página HTTPS. Solicite ao provedor um endereço HTTPS.';
+  }
+  if (error instanceof TypeError) {
+    return 'O servidor não permitiu acesso direto pelo navegador (CORS) ou está indisponível. Sem proxy, o provedor precisa liberar CORS e HTTPS.';
+  }
+  return error instanceof Error ? error.message : 'Falha ao conectar diretamente à lista';
+}
+
 export default function PlayerPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -42,6 +84,7 @@ export default function PlayerPage() {
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [liveExtension, setLiveExtension] = useState('m3u8');
 
   useEffect(() => {
     const saved = readJson<Credentials | null>(STORAGE.credentials, null);
@@ -52,21 +95,41 @@ export default function PlayerPage() {
   }, []);
 
   async function api(action = '', extra: Record<string, string | number> = {}, auth = credentials) {
-    const response = await fetch('/api/xtream', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...auth, action, ...extra }) });
-    const data = await response.json();
-    if (!response.ok || data?.error) throw new Error(data?.error || 'Não foi possível carregar a lista');
+    const directAuth = normalizeCredentials(auth);
+    const endpoint = new URL(`${directAuth.server}/player_api.php`);
+    endpoint.searchParams.set('username', directAuth.username);
+    endpoint.searchParams.set('password', directAuth.password);
+    if (action) endpoint.searchParams.set('action', action);
+    Object.entries(extra).forEach(([key, value]) => endpoint.searchParams.set(key, String(value)));
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!response.ok) throw new Error(`O servidor respondeu com erro ${response.status}`);
+    const text = await response.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { throw new Error('O endereço não retornou uma resposta Xtream válida'); }
+    if (data?.error) throw new Error(String(data.error));
     return data;
   }
 
   async function connect(event?: FormEvent, auth = credentials) {
     event?.preventDefault(); setLoading(true); setError('');
     try {
-      const data = await api('', {}, auth);
+      const directAuth = normalizeCredentials(auth);
+      const data = await api('', {}, directAuth);
       if (Number(data?.user_info?.auth) !== 1) throw new Error('Servidor, usuário ou senha inválidos');
-      localStorage.setItem(STORAGE.credentials, JSON.stringify(auth));
-      setCredentials(auth); setProfile(data.user_info || {}); setConnected(true);
-      await loadSection('live', auth);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Falha no login'); setConnected(false); }
+      const formats = Array.isArray(data?.user_info?.allowed_output_formats) ? data.user_info.allowed_output_formats : [];
+      setLiveExtension(formats.includes('m3u8') ? 'm3u8' : (formats.includes('ts') ? 'ts' : 'm3u8'));
+      localStorage.setItem(STORAGE.credentials, JSON.stringify(directAuth));
+      setCredentials(directAuth); setProfile(data.user_info || {}); setConnected(true);
+      await loadSection('live', directAuth);
+    } catch (e) { setError(directConnectionError(e, auth.server)); setConnected(false); }
     finally { setLoading(false); }
   }
 
@@ -76,7 +139,7 @@ export default function PlayerPage() {
       const [categoryData, itemData] = await Promise.all([api(section[next].categories, {}, auth), api(section[next].items, {}, auth)]);
       setCategories(Array.isArray(categoryData) ? categoryData : []);
       setItems(Array.isArray(itemData) ? itemData : []);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Falha ao carregar o conteúdo'); }
+    } catch (e) { setError(directConnectionError(e, auth.server)); }
     finally { setLoading(false); }
   }
 
@@ -95,13 +158,17 @@ export default function PlayerPage() {
   function playUrl(rawUrl: string, resumeKey?: string) {
     const video = videoRef.current; if (!video) return;
     hlsRef.current?.destroy(); hlsRef.current = null;
-    const url = `/api/stream?url=${encodeURIComponent(rawUrl)}`;
+    const url = rawUrl;
     const resume = resumeKey ? readJson<Record<string, number>>(STORAGE.progress, {})[resumeKey] || 0 : 0;
     const restore = () => { if (resume > 10 && Number.isFinite(video.duration) && resume < video.duration - 20) video.currentTime = resume; void video.play(); };
     if (rawUrl.toLowerCase().includes('.m3u8') && Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true, lowLatencyMode: true }); hlsRef.current = hls; hls.loadSource(url); hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, restore);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) setError('O provedor recusou a reprodução direta ou não liberou CORS para o vídeo.');
+      });
     } else { video.src = url; video.onloadedmetadata = restore; }
+    video.onerror = () => setError('Não foi possível reproduzir diretamente este conteúdo. Verifique HTTPS, formato e permissão do provedor.');
     video.ontimeupdate = () => {
       if (!resumeKey || !Number.isFinite(video.currentTime)) return;
       const saved = readJson<Record<string, number>>(STORAGE.progress, {}); saved[resumeKey] = Math.floor(video.currentTime); localStorage.setItem(STORAGE.progress, JSON.stringify(saved));
@@ -120,7 +187,7 @@ export default function PlayerPage() {
       finally { setLoading(false); }
       return;
     }
-    const extension = kind === 'live' ? 'm3u8' : (item.container_extension || 'mp4');
+    const extension = kind === 'live' ? liveExtension : (item.container_extension || 'mp4');
     playUrl(streamUrl(item.stream_id!, extension, kind), mediaKey(item));
   }
 
@@ -139,10 +206,10 @@ export default function PlayerPage() {
     <div className={styles.logo}>N</div><p className={styles.eyebrow}>NEXASTREAM WEB</p><h1>Seu entretenimento,<br/><span>em qualquer tela.</span></h1>
     <p className={styles.muted}>Entre com os dados Xtream Codes da sua lista.</p>
     <form onSubmit={connect} className={styles.loginForm}>
-      <label>Endereço do servidor<input value={credentials.server} onChange={(e) => setCredentials({ ...credentials, server: e.target.value })} placeholder="http://servidor.com:porta" required /></label>
-      <div className={styles.formRow}><label>Usuário<input value={credentials.username} onChange={(e) => setCredentials({ ...credentials, username: e.target.value })} required /></label><label>Senha<input type="password" value={credentials.password} onChange={(e) => setCredentials({ ...credentials, password: e.target.value })} required /></label></div>
+      <label>Servidor ou link Xtream<input value={credentials.server} onChange={(e) => setCredentials({ ...credentials, server: e.target.value })} placeholder="https://servidor.com:porta ou link get.php" required /></label>
+      <div className={styles.formRow}><label>Usuário<input value={credentials.username} onChange={(e) => setCredentials({ ...credentials, username: e.target.value })} placeholder="Opcional em link completo" /></label><label>Senha<input type="password" value={credentials.password} onChange={(e) => setCredentials({ ...credentials, password: e.target.value })} placeholder="Opcional em link completo" /></label></div>
       {error && <div className={styles.error}>{error}</div>}<button disabled={loading}>{loading ? 'Conectando…' : 'Entrar no player'}</button>
-    </form><small>Use apenas listas e conteúdos para os quais você possui autorização.</small>
+    </form><small>Conexão direta, sem proxy. O servidor da lista precisa oferecer HTTPS e permitir CORS no navegador.</small>
   </section></main>;
 
   return <main className={styles.app}>
